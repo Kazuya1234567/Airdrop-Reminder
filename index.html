@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airdrop Cloud Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: white; transition: all 0.3s; }
+        .group-container { background: #1e293b; border-radius: 16px; padding: 1.25rem; margin-bottom: 2rem; border: 1px solid #334155; }
+        .grid-layout { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        @media (min-width: 640px) { .grid-layout { grid-template-columns: repeat(4, 1fr); } }
+        .card { background: #334155; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; align-items: center; text-align: center; aspect-ratio: 1 / 1; justify-content: space-between; transition: all 0.2s ease-in-out; position: relative; border: 1px solid transparent; }
+        .done { opacity: 0.4; background: #1e293b; border: 1px dashed #475569; filter: grayscale(1); }
+        .modal-bg { background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(4px); }
+        input, select { background: #0f172a; border: 1px solid #334155; color: white; padding: 10px; border-radius: 8px; width: 100%; }
+        .loading-shimmer { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="p-5 max-w-4xl mx-auto font-sans">
+
+    <header class="mb-8 text-center">
+        <h1 class="text-3xl font-black text-blue-500 tracking-tighter italic uppercase">Airdrop Cloud</h1>
+        <p id="current-date" class="text-slate-500 text-xs font-mono mt-1 tracking-widest">CONNECTING TO DATABASE...</p>
+    </header>
+
+    <div id="dashboard">
+        <div class="group-container">
+            <h2 class="text-sm font-black mb-4 text-green-400 uppercase tracking-widest flex items-center gap-2"><span>📅</span> Daily Tasks</h2>
+            <div id="group-Daily" class="grid-layout"></div>
+        </div>
+        <div class="group-container">
+            <h2 class="text-sm font-black mb-4 text-yellow-400 uppercase tracking-widest flex items-center gap-2"><span>⏳</span> Waitlist</h2>
+            <div id="group-Waitlist" class="grid-layout"></div>
+        </div>
+        <div class="group-container">
+            <h2 class="text-sm font-black mb-4 text-purple-400 uppercase tracking-widest flex items-center gap-2"><span>🛠️</span> Testnet</h2>
+            <div id="group-Testnet" class="grid-layout"></div>
+        </div>
+    </div>
+
+    <div id="modal" class="modal-bg fixed inset-0 flex items-center justify-center z-50 hidden p-6">
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 w-full max-w-sm shadow-2xl">
+            <h2 class="text-xl font-bold mb-4 text-blue-400">Add New Item</h2>
+            <div class="space-y-4">
+                <input type="text" id="nameInput" placeholder="Airdrop Name">
+                <input type="text" id="linkInput" placeholder="Link (e.g. blum.io)">
+                <select id="groupInput">
+                    <option value="Daily">Daily Tasks</option>
+                    <option value="Waitlist">Waitlist</option>
+                    <option value="Testnet">Testnet</option>
+                </select>
+                <div class="flex gap-2 pt-2">
+                    <button onclick="toggleModal()" class="flex-1 bg-slate-700 py-2 rounded-lg font-bold">Cancel</button>
+                    <button id="saveBtn" onclick="addItem()" class="flex-1 bg-blue-600 py-2 rounded-lg font-bold">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // MASUKKAN URL GOOGLE APPS SCRIPT KAMU DI SINI
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwF1gS6FZ1OZNC0GKygPWtkKix47Cmu6eJPuvsYFfdQ8q-ubCXejHqdkkAl8Kw8Jv4mIw/exec"; 
+
+        let airdropData = [];
+        const today = new Date().toDateString();
+
+        // 1. Ambil Data dari Google Sheets
+        async function fetchData() {
+            try {
+                const response = await fetch(SCRIPT_URL);
+                airdropData = await response.json();
+                document.getElementById('current-date').innerText = today.toUpperCase();
+                renderDashboard();
+            } catch (err) {
+                document.getElementById('current-date').innerText = "OFFLINE / ERROR";
+                console.error("Gagal ambil data:", err);
+            }
+        }
+
+        // 2. Tambah Data
+        async function addItem() {
+            const name = document.getElementById('nameInput').value;
+            let link = document.getElementById('linkInput').value;
+            const group = document.getElementById('groupInput').value;
+            const btn = document.getElementById('saveBtn');
+
+            if (!name || !link) return alert("Isi semua bidang!");
+            if (!link.startsWith('http')) link = 'https://' + link;
+
+            btn.innerText = "Saving...";
+            btn.disabled = true;
+
+            const payload = { action: 'add', id: Date.now(), name, link, group };
+
+            try {
+                // Gunakan mode no-cors jika mengalami kendala, 
+                // tapi POST biasa ke Google Script biasanya butuh response
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                
+                toggleModal();
+                btn.innerText = "Save";
+                btn.disabled = false;
+                document.getElementById('nameInput').value = '';
+                document.getElementById('linkInput').value = '';
+                
+                // Refresh data setelah 1 detik (beri waktu Google Script memproses)
+                setTimeout(fetchData, 1000);
+            } catch (err) {
+                alert("Gagal menyimpan!");
+                btn.disabled = false;
+            }
+        }
+
+        // 3. Hapus Data
+        async function deleteItem(id) {
+            if(!confirm("Hapus airdrop ini dari Cloud?")) return;
+            
+            await fetch(SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'delete', id: id })
+            });
+            setTimeout(fetchData, 500);
+        }
+
+        function toggleModal(group = 'Daily') {
+            const modal = document.getElementById('modal');
+            document.getElementById('groupInput').value = group;
+            modal.classList.toggle('hidden');
+        }
+
+        // Status "Done" tetap di LocalStorage karena bersifat personal/harian
+        function toggleDone(id) {
+            const key = `status_${id}_${today}`;
+            if (localStorage.getItem(key)) {
+                localStorage.removeItem(key);
+            } else {
+                localStorage.setItem(key, 'true');
+            }
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            const groups = ['Daily', 'Waitlist', 'Testnet'];
+            groups.forEach(g => {
+                const container = document.getElementById(`group-${g}`);
+                container.innerHTML = '';
+
+                // Tombol Plus
+                const addBtn = document.createElement('div');
+                addBtn.className = 'card border-2 border-dashed border-slate-600 bg-transparent cursor-pointer hover:border-blue-500';
+                addBtn.onclick = () => toggleModal(g);
+                addBtn.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-full">
+                        <span class="text-4xl text-blue-500 font-light">+</span>
+                        <span class="text-[9px] mt-1 text-slate-500 font-black uppercase tracking-tighter">Add New</span>
+                    </div>`;
+                container.appendChild(addBtn);
+
+                // Render Item dari Data Cloud
+                const filtered = airdropData.filter(item => item.group === g);
+                filtered.forEach(item => {
+                    const isDone = localStorage.getItem(`status_${item.id}_${today}`);
+                    const div = document.createElement('div');
+                    div.className = `card ${isDone ? 'done' : ''}`;
+                    div.innerHTML = `
+                        <button onclick="deleteItem(${item.id})" class="absolute top-1 right-2 text-slate-500 hover:text-red-400 text-xl">&times;</button>
+                        <div class="mt-4 flex flex-col items-center cursor-pointer w-full" onclick="toggleDone(${item.id})">
+                            <div class="text-2xl mb-1">${isDone ? '✅' : '💎'}</div>
+                            <span class="font-bold text-[10px] leading-tight break-words w-full px-1 uppercase tracking-tighter">${item.name}</span>
+                        </div>
+                        <div class="flex flex-col gap-1 w-full mt-2">
+                            <a href="${item.link}" target="_blank" onclick="event.stopPropagation()" class="bg-blue-600 text-[10px] py-1.5 rounded-md font-black hover:bg-blue-500">OPEN</a>
+                            <button onclick="toggleDone(${item.id})" class="text-[9px] bg-slate-700 py-1 rounded-md font-bold uppercase italic">${isDone ? 'Reset' : 'Done'}</button>
+                        </div>`;
+                    container.appendChild(div);
+                });
+            });
+        }
+
+        // Mulai Ambil Data
+        fetchData();
+    </script>
+</body>
+</html>
